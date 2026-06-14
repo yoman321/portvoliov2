@@ -61,6 +61,18 @@ export default class BaseWorldScene extends Phaser.Scene {
     for (const it of this.interactables) {
       const range = it.range ?? DEFAULT_RANGE;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, it.x, it.y);
+      // `armOnLeave` interactables stay dormant on spawn (so arriving on top of
+      // one — e.g. just inside an interior exit — doesn't flash its prompt), but
+      // arm the instant the player moves back toward it (or leaves range). The
+      // dot of velocity with the direction to the target is >0 when approaching,
+      // so turning around toward the exit shows it immediately; moving deeper
+      // into the room does not.
+      if (it.armOnLeave && !it._armed) {
+        const v = this.player.body.velocity;
+        const towards = (it.x - this.player.x) * v.x + (it.y - this.player.y) * v.y;
+        if (d > range || towards > 0) it._armed = true;
+        else continue;
+      }
       if (d <= range && d < best) {
         best = d;
         nearest = it;
@@ -137,6 +149,19 @@ export default class BaseWorldScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(DEPTH.ui + 1)
       .setVisible(false);
+
+    // Dim controls hint on the dialogue's top line so the player knows how to
+    // advance and that Esc closes the chat.
+    this.dialogueHint = this.add
+      .text(0, 0, '[Space] next   [Esc] close', {
+        fontFamily: 'monospace',
+        fontSize: '8px',
+        color: '#8a86a0',
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.ui + 1)
+      .setVisible(false);
   }
 
   // Pins the dialogue box across the bottom of the current view. Safe to call
@@ -148,13 +173,16 @@ export default class BaseWorldScene extends Phaser.Scene {
     this.dialogueBg.setPosition(width / 2, height - boxH / 2 - 6).setSize(width - 24, boxH);
     this.dialogueName.setPosition(20, height - boxH - 2);
     this.dialogueText.setPosition(20, height - boxH + 12).setWordWrapWidth(width - 48);
+    this.dialogueHint.setPosition(width - 20, height - boxH - 2);
   }
 
   openDialogue(name, lines) {
     if (!lines || lines.length === 0) return;
     this.dialogue = { open: true, lines, index: 0 };
     this.prompt.setVisible(false);
-    [this.dialogueBg, this.dialogueName, this.dialogueText].forEach((o) => o.setVisible(true));
+    [this.dialogueBg, this.dialogueName, this.dialogueText, this.dialogueHint].forEach((o) =>
+      o.setVisible(true)
+    );
     this.dialogueName.setText(name);
     this.dialogueText.setText(lines[0]);
   }
@@ -171,6 +199,8 @@ export default class BaseWorldScene extends Phaser.Scene {
   closeDialogue() {
     if (!this.dialogue) return;
     this.dialogue.open = false;
-    [this.dialogueBg, this.dialogueName, this.dialogueText].forEach((o) => o.setVisible(false));
+    [this.dialogueBg, this.dialogueName, this.dialogueText, this.dialogueHint].forEach((o) =>
+      o.setVisible(false)
+    );
   }
 }

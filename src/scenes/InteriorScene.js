@@ -2,8 +2,12 @@ import Phaser from 'phaser';
 import { TILE, DEPTH } from '../config.js';
 import BaseWorldScene from './BaseWorldScene.js';
 import Player from '../entities/Player.js';
+import Resident from '../entities/Resident.js';
 import { INTERIORS } from '../data/interiors.js';
 import { NPCS } from '../data/portfolio.js';
+import { createFloor } from '../prefab/createFloor.js';
+import { createWall } from '../prefab/createWall.js';
+import { createPortal } from '../prefab/portal.js';
 
 // One generic interior, restarted with `{ id }` to render any room from
 // interiors.js (the player's home or a shop). Walls are a solid border with a
@@ -28,7 +32,7 @@ export default class InteriorScene extends BaseWorldScene {
     const H = this.def.rows * TILE;
     this.physics.world.setBounds(0, 0, W, H);
 
-    this.createFloor(W, H);
+    createFloor(this, { key: `floor_${this.interiorId}`, w: W, h: H, base: this.def.floor, alt: this.def.floorAlt });
     this.solids = this.physics.add.staticGroup();
     this.createWalls(W, H);
     this.createProps();
@@ -41,8 +45,13 @@ export default class InteriorScene extends BaseWorldScene {
     this.physics.add.collider(this.player, this.solids);
     if (this.resident) this.physics.add.collider(this.player, this.resident);
 
-    this.cameras.main.setBounds(0, 0, W, H);
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    // A room is a small, fixed space — don't follow the player; keep the whole
+    // room centred on screen, and re-centre whenever the window/buffer resizes.
+    this.roomW = W;
+    this.roomH = H;
+    this.centerCamera();
+    this.scale.on('resize', this.centerCamera, this);
+    this.events.once('shutdown', () => this.scale.off('resize', this.centerCamera, this));
 
     this.add
       .text(8, 6, this.def.name, {
@@ -56,47 +65,33 @@ export default class InteriorScene extends BaseWorldScene {
     this.setupCommon();
   }
 
-  // --- World -------------------------------------------------------------
-
-  createFloor(W, H) {
-    const key = `floor_${this.interiorId}`;
-    if (!this.textures.exists(key)) {
-      const g = this.make.graphics({ x: 0, y: 0 }, false);
-      g.fillStyle(this.def.floor, 1);
-      g.fillRect(0, 0, TILE, TILE);
-      g.fillStyle(this.def.floorAlt, 1);
-      g.fillRect(0, 0, TILE / 2, TILE / 2);
-      g.fillRect(TILE / 2, TILE / 2, TILE / 2, TILE / 2);
-      g.generateTexture(key, TILE, TILE);
-      g.destroy();
-    }
-    this.add.tileSprite(0, 0, W, H, key).setOrigin(0, 0).setDepth(DEPTH.ground);
+  // Centre the room in the view. camera.zoom is 1 (the pixel upscale lives on the
+  // canvas/CSS), so this.scale.width/height are the visible world dimensions.
+  centerCamera() {
+    this.cameras.main.setScroll(
+      this.roomW / 2 - this.scale.width / 2,
+      this.roomH / 2 - this.scale.height / 2
+    );
   }
 
-  createWalls(W, H) {
-    const gapL = W / 2 - DOOR_W / 2;
-    const gapR = W / 2 + DOOR_W / 2;
+  // --- World -------------------------------------------------------------
 
+
+  createWalls(W, H) {
+    // Flat-colour walls with a doorway gap; the segment layout + colliders live
+    // in the createWall prefab, we just fill each segment with the room colour.
     const g = this.add.graphics().setDepth(DEPTH.decorBelow);
     g.fillStyle(this.def.wall, 1);
-    g.fillRect(0, 0, W, WALL); // top
-    g.fillRect(0, 0, WALL, H); // left
-    g.fillRect(W - WALL, 0, WALL, H); // right
-    g.fillRect(0, H - WALL, gapL, WALL); // bottom-left of doorway
-    g.fillRect(gapR, H - WALL, W - gapR, WALL); // bottom-right of doorway
-    g.fillStyle(this.def.accent, 0.25); // baseboard trim
+    createWall(this, {
+      solids: this.solids,
+      w: W,
+      h: H,
+      thickness: WALL,
+      doorWidth: DOOR_W,
+      render: (s) => g.fillRect(s.x, s.y, s.w, s.h),
+    });
+    g.fillStyle(this.def.accent, 0.25); // baseboard trim along the top wall
     g.fillRect(0, WALL, W, 2);
-
-    const addSolid = (cx, cy, w, h) => {
-      const b = this.solids.create(cx, cy, null);
-      b.setVisible(false).setSize(w, h);
-      b.body.updateFromGameObject();
-    };
-    addSolid(W / 2, WALL / 2, W, WALL);
-    addSolid(WALL / 2, H / 2, WALL, H);
-    addSolid(W - WALL / 2, H / 2, WALL, H);
-    addSolid(gapL / 2, H - WALL / 2, gapL, WALL);
-    addSolid((W + gapR) / 2, H - WALL / 2, W - gapR, WALL);
   }
 
   createProps() {
@@ -142,52 +137,65 @@ export default class InteriorScene extends BaseWorldScene {
     const rid = this.def.resident;
     if (!rid) return;
     const at = this.def.residentAt;
-    const x = at.tx * TILE + TILE / 2;
-    const y = at.ty * TILE + TILE;
+    const npc = NPCS[rid];
 
-    const sprite = this.physics.add.staticSprite(x, y, `npc_${rid}`);
-    sprite.setOrigin(0.5, 1).setDepth(DEPTH.entities + y * 0.001);
-    sprite.body.setSize(20, 12).setOffset(2, sprite.height - 12);
-    sprite.body.updateFromGameObject();
+    this.resident = new Resident(this, at.tx * TILE + TILE / 2, at.ty * TILE + TILE, {
+      textureKey: `npc_${rid}`,
+      role: npc.role,
+      lines: npc.lines,
+    });
+    this.addInteractable(this.resident.interactable());
+  }
 
+  createExit(W, H) {
+    const cx = W / 2;
+    const gx = cx - DOOR_W / 2; // left edge of the doorway gap
+
+    // Daylight spilling in through the opening → reads as "outside this way".
     this.add
-      .text(x, y - sprite.height - 4, NPCS[rid].role, {
+      .graphics()
+      .setDepth(DEPTH.ground + 1)
+      .fillStyle(0xf2e3a8, 1)
+      .fillRect(gx, H - WALL, DOOR_W, WALL);
+
+    // Door frame: accent posts flanking the gap + a lintel across the top, so the
+    // opening reads as a real door rather than a hole in the wall.
+    const frame = this.add.graphics().setDepth(DEPTH.decorBelow + 1);
+    frame.fillStyle(this.def.accent, 1);
+    frame.fillRect(gx - 3, H - WALL - 5, 3, WALL + 5); // left post
+    frame.fillRect(gx + DOOR_W, H - WALL - 5, 3, WALL + 5); // right post
+    frame.fillRect(gx - 3, H - WALL - 5, DOOR_W + 6, 3); // lintel
+
+    // Threshold mat just inside the doorway on the floor.
+    this.add
+      .graphics()
+      .setDepth(DEPTH.ground + 2)
+      .fillStyle(0x6b5535, 1)
+      .fillRoundedRect(gx + 4, H - WALL - 13, DOOR_W - 8, 11, 3);
+
+    // Always-visible sign above the doorway so the exit is obvious at a glance
+    // (the [E] leave prompt only appears once you're close).
+    this.add
+      .text(cx, H - WALL - 16, '▼ Exit', {
         fontFamily: 'monospace',
-        fontSize: '8px',
-        color: '#ffffff',
-        backgroundColor: '#00000088',
-        padding: { x: 3, y: 1 },
+        fontSize: '9px',
+        color: '#ffe066',
+        align: 'center',
+        backgroundColor: '#000000aa',
+        padding: { x: 3, y: 2 },
       })
       .setOrigin(0.5, 1)
       .setDepth(DEPTH.ui);
 
-    this.addInteractable({
-      x,
-      y,
-      promptY: y - sprite.height - 14,
-      range: 40,
-      label: '[E] talk',
-      action: (s) => s.openDialogue(NPCS[rid].role, NPCS[rid].lines),
-    });
-
-    this.resident = sprite;
-  }
-
-  createExit(W, H) {
-    // Dark threshold inside the doorway gap, plus the [E] leave interactable.
-    this.add
-      .graphics()
-      .setDepth(DEPTH.ground + 1)
-      .fillStyle(0x140f0a, 1)
-      .fillRect(W / 2 - DOOR_W / 2, H - WALL, DOOR_W, WALL);
-
-    this.addInteractable({
-      x: W / 2,
+    createPortal(this, {
+      x: cx,
       y: H - WALL,
-      promptY: H - WALL - 6,
+      promptY: H - WALL - 38, // sits a few px above the "▼ Exit" sign (no overlap)
       range: 40,
       label: '[E] leave',
-      action: (s) => s.fadeTo('CabinExterior', { spawnDoor: this.interiorId }),
+      to: 'CabinExterior',
+      data: { spawnDoor: this.interiorId },
+      armOnLeave: true, // player spawns in the doorway — don't show until they step in
     });
   }
 }

@@ -3,6 +3,10 @@ import { TILE, COLORS, DEPTH } from '../config.js';
 import BaseWorldScene from './BaseWorldScene.js';
 import Player from '../entities/Player.js';
 import { NPCS } from '../data/portfolio.js';
+import { createFloor } from '../prefab/createFloor.js';
+import { createWall } from '../prefab/createWall.js';
+import { solidRect } from '../prefab/solidRect.js';
+import { createPortal } from '../prefab/portal.js';
 
 // A small 2D town in the Pokémon mould: a tree border rings the map, buildings
 // are scattered across it, and a network of paths links their doors. Home sits
@@ -77,36 +81,9 @@ export default class CabinExteriorScene extends BaseWorldScene {
 
   // --- World -------------------------------------------------------------
 
-  // An invisible, exactly-sized static collider centred on (cx, cy). We back it
-  // with a real 1x1 texture and size it via setDisplaySize + refreshBody:
-  // sizing a textureless static body with setSize() gets clobbered by
-  // updateFromGameObject (it resamples the object's display size), which left
-  // earlier colliders tiny so the player walked through.
-  solidRect(cx, cy, w, h) {
-    if (!this.textures.exists('px')) {
-      const g = this.make.graphics({ x: 0, y: 0 }, false);
-      g.fillStyle(0xffffff, 1).fillRect(0, 0, 1, 1);
-      g.generateTexture('px', 1, 1);
-      g.destroy();
-    }
-    const body = this.solids.create(cx, cy, 'px').setVisible(false);
-    body.setDisplaySize(w, h).refreshBody();
-    return body;
-  }
-
   createGround() {
     // Grass base tiled across the whole map.
-    if (!this.textures.exists('grass')) {
-      const g = this.make.graphics({ x: 0, y: 0 }, false);
-      g.fillStyle(COLORS.grass, 1);
-      g.fillRect(0, 0, TILE, TILE);
-      g.fillStyle(COLORS.grassAlt, 1);
-      g.fillRect(0, 0, TILE / 2, TILE / 2);
-      g.fillRect(TILE / 2, TILE / 2, TILE / 2, TILE / 2);
-      g.generateTexture('grass', TILE, TILE);
-      g.destroy();
-    }
-    this.add.tileSprite(0, 0, WORLD_W, WORLD_H, 'grass').setOrigin(0, 0).setDepth(DEPTH.ground);
+    createFloor(this, { key: 'grass', w: WORLD_W, h: WORLD_H, base: COLORS.grass, alt: COLORS.grassAlt });
 
     // Paths: a darker shoulder pass, then the surface, so overlapping segments
     // read as one continuous network.
@@ -118,30 +95,21 @@ export default class CabinExteriorScene extends BaseWorldScene {
   }
 
   createForestBorder() {
-    // A textured tree tile for the perimeter.
-    if (!this.textures.exists('forest')) {
-      const g = this.make.graphics({ x: 0, y: 0 }, false);
-      g.fillStyle(0x16301f, 1);
-      g.fillRect(0, 0, TILE, TILE);
-      g.fillStyle(0x1f4a2e, 1); // canopy clusters
-      g.fillCircle(8, 9, 9);
-      g.fillCircle(24, 22, 10);
-      g.fillStyle(0x2e6440, 1); // highlights
-      g.fillCircle(6, 7, 4);
-      g.fillCircle(22, 20, 5);
-      g.generateTexture('forest', TILE, TILE);
-      g.destroy();
-    }
-
-    const band = (x, y, w, h) => {
-      this.add.tileSprite(x, y, w, h, 'forest').setOrigin(0, 0).setDepth(DEPTH.decorAbove);
-      this.solidRect(x + w / 2, y + h / 2, w, h);
-    };
-    const t = BORDER * TILE;
-    band(0, 0, WORLD_W, t); // top
-    band(0, WORLD_H - t, WORLD_W, t); // bottom
-    band(0, t, t, WORLD_H - 2 * t); // left
-    band(WORLD_W - t, t, t, WORLD_H - 2 * t); // right
+    // A textured tree tile rings the map (no doorway); the canopy look stays
+    // here, the band layout + colliders live in the createWall prefab.
+    createWall(this, {
+      solids: this.solids,
+      w: WORLD_W,
+      h: WORLD_H,
+      thickness: BORDER * TILE,
+      key: 'forest',
+      depth: DEPTH.decorAbove,
+      paint: (g) => {
+        g.fillStyle(0x16301f, 1).fillRect(0, 0, TILE, TILE);
+        g.fillStyle(0x1f4a2e, 1).fillCircle(8, 9, 9).fillCircle(24, 22, 10); // canopy clusters
+        g.fillStyle(0x2e6440, 1).fillCircle(6, 7, 4).fillCircle(22, 20, 5); // highlights
+      },
+    });
   }
 
   createBuilding(b) {
@@ -194,15 +162,16 @@ export default class CabinExteriorScene extends BaseWorldScene {
     const bodyTop = top + BUILDING_TOP_WALK_IN;
     const bodyBottom = bottom + BUILDING_FRONT_PAD;
     const bodyH = bodyBottom - bodyTop;
-    this.solidRect(cx, bodyTop + bodyH / 2, w, bodyH);
+    solidRect(this, this.solids, cx, bodyTop + bodyH / 2, w, bodyH);
 
-    this.addInteractable({
+    createPortal(this, {
       x: cx,
       y: bottom + 4,
       promptY: bottom - doorH - 6,
       range: 30,
       label: '[E] enter',
-      action: (s) => s.fadeTo('Interior', { id: b.id }),
+      to: 'Interior',
+      data: { id: b.id },
     });
   }
 
@@ -229,15 +198,16 @@ export default class CabinExteriorScene extends BaseWorldScene {
       .setDepth(DEPTH.ui);
 
     // Solid rock so the player stops at the mouth.
-    this.solidRect(CAVE.x, CAVE.y - TILE * 0.7, TILE * 3, TILE * 1.6);
+    solidRect(this, this.solids, CAVE.x, CAVE.y - TILE * 0.7, TILE * 3, TILE * 1.6);
 
-    this.addInteractable({
+    createPortal(this, {
       x: CAVE.x,
       y: CAVE.y + 6,
       promptY: CAVE.y - TILE * 1.1,
       range: 38,
       label: '[E] enter',
-      action: (s) => s.fadeTo('Interior', { id: 'dungeon' }),
+      to: 'Interior',
+      data: { id: 'dungeon' },
     });
   }
 
