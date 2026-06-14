@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+.DS_Store
+.vercel
+# Mana Seed art — licensed for use but NOT redistribution; keep out of the repo.
+# Files stay on disk locally for dev/build; deploy via prebuilt dist.
+public/assets/
