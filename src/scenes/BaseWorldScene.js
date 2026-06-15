@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { DEPTH } from '../config.js';
+import { PROFILE } from '../data/portfolio.js';
+import { openAboutModal, closeAboutModal } from '../ui/aboutModal.js';
 
 // Shared base for every walkable scene (exterior town + interiors). It owns the
 // reusable pieces — interaction prompt, dialogue box, the nearest-interactable
@@ -25,7 +27,11 @@ export default class BaseWorldScene extends Phaser.Scene {
     // Re-flow the screen-pinned dialogue box whenever the render buffer changes
     // size (window resize). The main camera is resized for us by Phaser.
     this.scale.on('resize', this.layoutDialogue, this);
-    this.events.once('shutdown', () => this.scale.off('resize', this.layoutDialogue, this));
+    this.events.once('shutdown', () => {
+      this.scale.off('resize', this.layoutDialogue, this);
+      closeAboutModal(); // tear down any open DOM modal when the scene ends
+      this.modalOpen = false;
+    });
 
     this.cameras.main.fadeIn(200, 0, 0, 0);
   }
@@ -45,7 +51,7 @@ export default class BaseWorldScene extends Phaser.Scene {
 
   update() {
     if (!this.player) return;
-    if (this._transitioning || this.dialogue.open) {
+    if (this._transitioning || this.dialogue.open || this.modalOpen) {
       this.player.setVelocity(0, 0);
       return;
     }
@@ -202,5 +208,22 @@ export default class BaseWorldScene extends Phaser.Scene {
     [this.dialogueBg, this.dialogueName, this.dialogueText, this.dialogueHint].forEach((o) =>
       o.setVisible(false)
     );
+  }
+
+  // --- About Me ----------------------------------------------------------
+
+  // Opens the DOM "About Me" modal (the mirror) and freezes the player until it
+  // closes. `modalOpen` is checked in update() to halt movement/interaction.
+  openAbout() {
+    if (this.modalOpen) return;
+    this.modalOpen = true;
+    this.player?.setVelocity(0, 0);
+    this.prompt.setVisible(false);
+    openAboutModal({
+      ...PROFILE,
+      onClose: () => {
+        this.modalOpen = false;
+      },
+    });
   }
 }

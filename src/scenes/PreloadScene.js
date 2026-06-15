@@ -45,7 +45,7 @@ export default class PreloadScene extends Phaser.Scene {
     this.makePlaceholderCharacter('npc_alchemist', 0x6a4a9c, 0xc8e070);
     this.makePlaceholderCharacter('npc_merchant', 0x3a7a9c, 0xe0c060);
 
-    this.scene.start('CabinExterior');
+    this.scene.start('Interior', { id: 'home' });
   }
 
   drawLoadingBar() {

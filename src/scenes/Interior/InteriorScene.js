@@ -1,20 +1,21 @@
 import Phaser from 'phaser';
-import { TILE, DEPTH } from '../config.js';
-import BaseWorldScene from './BaseWorldScene.js';
-import Player from '../entities/Player.js';
-import Resident from '../entities/Resident.js';
-import { INTERIORS } from '../data/interiors.js';
-import { NPCS } from '../data/portfolio.js';
-import { createFloor } from '../prefab/createFloor.js';
-import { createWall } from '../prefab/createWall.js';
-import { createPortal } from '../prefab/portal.js';
+import { TILE, DEPTH } from '../../config.js';
+import BaseWorldScene from '../BaseWorldScene.js';
+import Player from '../../entities/Player.js';
+import Resident from '../../entities/Resident.js';
+import { INTERIORS } from '../../data/interiors.js';
+import { NPCS } from '../../data/portfolio.js';
+import { createFloor } from '../../prefab/createFloor.js';
+import { createWall } from '../../prefab/createWall.js';
+import { solidRect } from '../../prefab/solidRect.js';
+import { createPortal } from '../../prefab/portal.js';
+import { LABEL, SIGN } from '../../ui/textStyles.js';
+import { WALL, DOOR_W, PROP_FOOT, PROP_FRONT_PAD } from './constants.js';
 
 // One generic interior, restarted with `{ id }` to render any room from
 // interiors.js (the player's home or a shop). Walls are a solid border with a
 // doorway gap at bottom-centre; [E] there returns to the exterior on the
 // matching doorstep.
-const WALL = 14; // wall thickness in px
-const DOOR_W = TILE * 1.5; // doorway gap width
 
 export default class InteriorScene extends BaseWorldScene {
   constructor() {
@@ -54,11 +55,7 @@ export default class InteriorScene extends BaseWorldScene {
     this.events.once('shutdown', () => this.scale.off('resize', this.centerCamera, this));
 
     this.add
-      .text(8, 6, this.def.name, {
-        fontFamily: 'monospace',
-        fontSize: '9px',
-        color: '#ffe066',
-      })
+      .text(8, 6, this.def.name, LABEL)
       .setScrollFactor(0)
       .setDepth(DEPTH.ui);
 
@@ -102,17 +99,35 @@ export default class InteriorScene extends BaseWorldScene {
       const h = p.th * TILE;
       const bottom = y + h;
 
+      const solid = p.solid ?? !p.decor;
+
+      // Solid props depth-sort by their base like entities, so the player passes
+      // BEHIND the upper part (and in front when standing below); flat decor
+      // (rugs, banners) stays beneath everything.
       this.add
         .graphics()
-        .setDepth(DEPTH.entities + bottom * 0.001 - 0.5)
+        .setDepth(DEPTH.entities + bottom * 0.001 - (solid ? 0 : 0.5))
         .fillStyle(p.color, 1)
         .fillRoundedRect(x, y, w, h, 3);
 
-      const solid = p.solid ?? !p.decor;
       if (solid) {
-        const b = this.solids.create(x + w / 2, y + h / 2, null);
-        b.setVisible(false).setSize(w, h);
-        b.body.updateFromGameObject();
+        // Only the base is solid (its footprint): tall props can be walked behind.
+        const footTop = bottom - Math.min(h, PROP_FOOT);
+        const footBottom = bottom + PROP_FRONT_PAD;
+        solidRect(this, this.solids, x + w / 2, (footTop + footBottom) / 2, w, footBottom - footTop);
+      }
+
+      // The mirror reflects you — [E] opens the About Me modal instead of a note.
+      if (p.about) {
+        this.addInteractable({
+          x: x + w / 2,
+          y: bottom,
+          promptY: y - 6,
+          range: 34,
+          label: '[E] look',
+          action: (s) => s.openAbout(),
+        });
+        return;
       }
 
       let lines = p.examine;
@@ -173,19 +188,33 @@ export default class InteriorScene extends BaseWorldScene {
       .fillStyle(0x6b5535, 1)
       .fillRoundedRect(gx + 4, H - WALL - 13, DOOR_W - 8, 11, 3);
 
+    const locked = this.def.lockedExit;
+
     // Always-visible sign above the doorway so the exit is obvious at a glance
-    // (the [E] leave prompt only appears once you're close).
+    // (the [E] prompt only appears once you're close). A locked door reads as a
+    // shut door rather than a way out.
     this.add
-      .text(cx, H - WALL - 16, '▼ Exit', {
-        fontFamily: 'monospace',
+      .text(cx, H - WALL - 16, locked ? '▼ Door' : '▼ Exit', {
+        ...SIGN,
         fontSize: '9px',
-        color: '#ffe066',
-        align: 'center',
-        backgroundColor: '#000000aa',
-        padding: { x: 3, y: 2 },
+        color: locked ? '#b0a080' : '#ffe066',
       })
       .setOrigin(0.5, 1)
       .setDepth(DEPTH.ui);
+
+    if (locked) {
+      // Sealed for now — interacting plays the locked message instead of leaving.
+      this.addInteractable({
+        x: cx,
+        y: H - WALL,
+        promptY: H - WALL - 38,
+        range: 40,
+        label: '[E] door',
+        armOnLeave: true, // player spawns in the doorway — don't flash on spawn
+        action: (s) => s.openDialogue('Door', locked),
+      });
+      return;
+    }
 
     createPortal(this, {
       x: cx,

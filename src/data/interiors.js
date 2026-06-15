@@ -20,6 +20,9 @@ export const INTERIORS = {
     wall: 0x3a2a1d,
     accent: 0x4a6fa5,
     resident: null,
+    // The exit is sealed for now — interacting with the door plays this instead
+    // of leaving. Remove this field to re-enable the portal out to the clearing.
+    lockedExit: ['The door won’t budge.', 'It’s not your time to leave yet.'],
     props: [
       {
         tx: 1, ty: 1, tw: 2, th: 3, color: 0x6a4a7a, name: 'Bed',
@@ -37,6 +40,10 @@ export const INTERIORS = {
       {
         tx: 11, ty: 6, tw: 2, th: 2, color: 0xb08040, name: 'Chest',
         examine: ['Old projects, half-finished ideas, the occasional gem.'],
+      },
+      {
+        tx: 5, ty: 1, tw: 1, th: 2, color: 0x9fb4c4, name: 'Mirror',
+        about: true, // [E] opens the About Me modal (your reflection)
       },
       { tx: 6, ty: 5, tw: 3, th: 2, color: 0x7a3a3a, decor: true }, // rug
     ],

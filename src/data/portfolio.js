@@ -5,6 +5,14 @@
 export const PROFILE = {
   name: 'Philippe Luo',
   tagline: 'Software Engineer',
+  // Shown in the mirror's "About Me" modal. Drop your photo at
+  // public/assets/me.jpg (falls back to your initials until it exists).
+  photo: 'assets/me.jpg',
+  about: [
+    'Hi, I’m Philippe — a software engineer who likes building things end to end.',
+    'This little world is my portfolio: wander out to the shops to meet the work, or brave the dungeon for the flagship project.',
+    'TODO: replace this with a few real sentences about yourself.',
+  ],
   // links shown on the title/about NPC
   links: {
     github: 'https://github.com/',

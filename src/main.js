@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
+import './style.css';
 import { PIXEL_SCALE, MIN_VIEW_WIDTH, MIN_VIEW_HEIGHT, COLORS } from './config.js';
 import BootScene from './scenes/BootScene.js';
 import PreloadScene from './scenes/PreloadScene.js';
-import CabinExteriorScene from './scenes/CabinExteriorScene.js';
-import InteriorScene from './scenes/InteriorScene.js';
+import CabinExteriorScene from './scenes/CabinExterior/CabinExteriorScene.js';
+import InteriorScene from './scenes/Interior/InteriorScene.js';
 
 // Size of the low-res render buffer for the current window. We divide the window
 // by PIXEL_SCALE (round up so the upscaled canvas always covers the window — any
