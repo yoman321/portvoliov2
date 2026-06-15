@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { DEPTH } from '../config.js';
-import { PROFILE } from '../data/portfolio.js';
-import { openAboutModal, closeAboutModal } from '../ui/aboutModal.js';
+import { closeAboutModal } from '../ui/aboutModal.js';
 
 // Shared base for every walkable scene (exterior town + interiors). It owns the
 // reusable pieces — interaction prompt, dialogue box, the nearest-interactable
@@ -42,8 +41,7 @@ export default class BaseWorldScene extends Phaser.Scene {
     return obj;
   }
 
-  bindKeys() {
-    this.input.keyboard.addKeys('E,SPACE');
+  bindKeys() { this.input.keyboard.addKeys('E,SPACE');
     this.input.keyboard.on('keydown-E', () => this.onInteract());
     this.input.keyboard.on('keydown-SPACE', () => this.onInteract());
     this.input.keyboard.on('keydown-ESC', () => this.closeDialogue());
@@ -210,20 +208,4 @@ export default class BaseWorldScene extends Phaser.Scene {
     );
   }
 
-  // --- About Me ----------------------------------------------------------
-
-  // Opens the DOM "About Me" modal (the mirror) and freezes the player until it
-  // closes. `modalOpen` is checked in update() to halt movement/interaction.
-  openAbout() {
-    if (this.modalOpen) return;
-    this.modalOpen = true;
-    this.player?.setVelocity(0, 0);
-    this.prompt.setVisible(false);
-    openAboutModal({
-      ...PROFILE,
-      onClose: () => {
-        this.modalOpen = false;
-      },
-    });
-  }
 }

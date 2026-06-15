@@ -1,34 +1,26 @@
 import Phaser from 'phaser';
 import { PLAYER, DEPTH } from '../config.js';
 
-// Layered Mana Seed character. The base body is the physics sprite; outfit and
-// hair are overlay sprites kept locked to the base position and playing the
-// same animation, so they read as one paper-doll character.
-//
-// Movement: arrows + WASD, 4-directional. Anim keys follow the convention
-// registered by charAnims.js: `<texture>-walk-<dir>` / `<texture>-idle-<dir>`.
-const OVERLAY_LAYERS = ['player_outfit', 'player_hair']; // bottom → top
-
+// Single composited LPC character. Movement: arrows + WASD, 4-directional.
+// Anim keys follow the convention registered by charAnims.js:
+// `player-walk-<dir>` / `player-idle-<dir>` (frames swap textures between the
+// idle.png and walk.png sheets automatically).
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
-    super(scene, x, y, 'player_base');
+    super(scene, x, y, 'player_idle');
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    this.baseKey = 'player_base';
+    this.baseKey = 'player';
     this.facing = 'down';
-    this.hasAnims = scene.anims.exists('player_base-idle-down');
+    this.hasAnims = scene.anims.exists('player-idle-down');
 
     // Feet-anchored origin → depth sorting by y looks correct.
     this.setOrigin(0.5, 1);
+    this.setScale(PLAYER.scale ?? 1);
     this.body.setSize(PLAYER.width, PLAYER.height);
     this.body.setOffset((this.width - PLAYER.width) / 2, this.height - PLAYER.height - 4);
     this.setCollideWorldBounds(true);
-
-    // Overlay parts (skipped gracefully if a texture is missing).
-    this.layers = OVERLAY_LAYERS.filter((k) => scene.textures.exists(k)).map((key) =>
-      scene.add.sprite(x, y, key).setOrigin(0.5, 1)
-    );
 
     this.cursors = scene.input.keyboard.createCursorKeys();
     this.keys = scene.input.keyboard.addKeys('W,A,S,D');
@@ -58,7 +50,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
       this.setVelocity(0, 0);
       this.facing = this.scene.debugFacing;
       this.animate(true);
-      this.syncLayers();
+      this.applyDepth();
       return;
     }
 
@@ -72,14 +64,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     this.animate(moving);
-    this.syncLayers();
+    this.applyDepth();
   }
 
   animate(moving) {
     const state = moving ? 'walk' : 'idle';
     if (this.hasAnims) {
       this.anims.play(`${this.baseKey}-${state}-${this.facing}`, true);
-      this.layers.forEach((s) => s.anims.play(`${s.texture.key}-${state}-${this.facing}`, true));
       return;
     }
     // Fallback for missing anims: bob + flip so movement still reads.
@@ -87,14 +78,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.setScale(1, moving ? 1 + Math.sin(this.scene.time.now / 80) * 0.03 : 1);
   }
 
-  // Keep overlays glued to the base sprite and stacked just above it,
-  // while the whole stack depth-sorts against other entities by world-y.
-  syncLayers() {
-    const baseDepth = DEPTH.entities + this.y * 0.001;
-    this.setDepth(baseDepth);
-    this.layers.forEach((s, i) => {
-      s.setPosition(this.x, this.y);
-      s.setDepth(baseDepth + 0.0001 * (i + 1));
-    });
+  // Depth-sort against other entities by world-y (feet origin).
+  applyDepth() {
+    this.setDepth(DEPTH.entities + this.y * 0.001);
   }
 }

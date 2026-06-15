@@ -1,7 +1,7 @@
 // Central tunables. Keeping these in one place so scene/entity code stays
 // declarative and the "feel" of the game is editable from a single file.
 
-export const TILE = 32; // world grid size in source pixels
+export const TILE = 16; // world grid size in source pixels (matches the tile art's native size)
 
 // How many screen pixels each source pixel occupies. The game renders into a
 // low-resolution buffer (window / PIXEL_SCALE) that is CSS-upscaled to fill the
@@ -15,7 +15,8 @@ export const MIN_VIEW_WIDTH = 360;
 export const MIN_VIEW_HEIGHT = 240;
 
 export const PLAYER = {
-  speed: 110, // px/sec
+  speed: 70, // px/sec
+  scale: 0.5, // LPC frames are 64px; halve so the player is ~2 tiles tall at TILE=16
   width: 18, // physics body, narrower than the sprite for nicer wall sliding
   height: 14, // body sits at the feet for top-down depth sorting
 };

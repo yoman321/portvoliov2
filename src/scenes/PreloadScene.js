@@ -2,28 +2,28 @@ import Phaser from 'phaser';
 import { COLORS } from '../config.js';
 import { registerCharAnims } from '../entities/charAnims.js';
 
-// Mana Seed page-1 sheets are 512x512 with 64px frames.
-const MANA_FRAME = { frameWidth: 64, frameHeight: 64 };
+// LPC animation sheets are 832x256 with 64px frames (13 cols x 4 rows).
+const LPC_FRAME = { frameWidth: 64, frameHeight: 64 };
 
-// Player paper-doll layers, bottom → top. Swap the file (or the vNN colour
-// variant) to restyle; the frame layout is identical across all parts.
-const PLAYER_LAYERS = {
-  player_base: 'assets/char_a_p1/char_a_p1_0bas_humn_v01.png',
-  player_outfit: 'assets/char_a_p1/1out/char_a_p1_1out_fstr_v01.png',
-  player_hair: 'assets/char_a_p1/4har/char_a_p1_4har_dap1_v01.png',
+// Player is a single composited LPC character (one sheet per animation), not a
+// paper-doll. Drop in more sheets from public/assets/player/ (run, jump, …) and
+// register their anims to use them.
+const PLAYER_SHEETS = {
+  player_walk: 'assets/player/walk.png',
+  player_idle: 'assets/player/idle.png',
 };
 
-// Loads/generates art, then starts the first gameplay scene.
+// Kenney "Roguelike/RPG Indoor" tileset: 16px tiles with 1px spacing between
+// them (458x305 → 27 columns x 18 rows). Loaded as a spritesheet so any tile is
+// addressable by frame index. Frame numbering is left→right, top→bottom:
+//   frame = row * INDOOR_COLS + col      (see INDOOR_COLS in Interior/constants)
+const INDOOR_FRAME = { frameWidth: 16, frameHeight: 16, spacing: 1 };
+
+// Loads art, then starts the first gameplay scene.
 //
-// Right now the player + NPC sprites are GENERATED programmer-art so the game
-// runs with zero asset files. To swap in the real Mana Seed Character Base:
-//   1. Drop the composited sheets in `public/assets/characters/`.
-//   2. In `preload()` below, `this.load.spritesheet('player', ...)` with the
-//      Mana Seed frame size (frameWidth/Height).
-//   3. Define walk animations in `createCharacterAnims()` and delete the
-//      matching `makePlaceholderCharacter()` call.
-// Player.js reads animation keys by convention (`<key>-walk-<dir>` / `<key>-idle-<dir>`),
-// so once the real anims exist no entity code changes.
+// The player uses real LPC sheets from public/assets/player/. NPCs are still
+// GENERATED programmer-art placeholders until themed dolls land.
+// Player.js reads animation keys by convention (`<key>-walk-<dir>` / `<key>-idle-<dir>`).
 export default class PreloadScene extends Phaser.Scene {
   constructor() {
     super('Preload');
@@ -31,14 +31,16 @@ export default class PreloadScene extends Phaser.Scene {
 
   preload() {
     this.drawLoadingBar();
-    for (const [key, path] of Object.entries(PLAYER_LAYERS)) {
-      this.load.spritesheet(key, path, MANA_FRAME);
+    for (const [key, path] of Object.entries(PLAYER_SHEETS)) {
+      this.load.spritesheet(key, path, LPC_FRAME);
     }
+    this.load.spritesheet('indoor', 'assets/interior/roguelikeIndoor_transparent.png', INDOOR_FRAME);
   }
 
   create() {
-    // Real player: register the standard char anims for each paper-doll layer.
-    Object.keys(PLAYER_LAYERS).forEach((key) => registerCharAnims(this, key));
+    // Player anims pull idle frames from idle.png and walk frames from walk.png;
+    // the sprite swaps texture per frame as each anim plays.
+    registerCharAnims(this, 'player', { idleKey: 'player_idle', walkKey: 'player_walk' });
 
     // NPCs still use generated placeholders until themed Mana Seed dolls land.
     this.makePlaceholderCharacter('npc_blacksmith', 0x9c4a3a, 0x2b2b2b);

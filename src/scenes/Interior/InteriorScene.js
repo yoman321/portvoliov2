@@ -3,14 +3,21 @@ import { TILE, DEPTH } from '../../config.js';
 import BaseWorldScene from '../BaseWorldScene.js';
 import Player from '../../entities/Player.js';
 import Resident from '../../entities/Resident.js';
+import InteriorObject from '../../entities/InteriorObject.js';
+import Mirror from '../../entities/Mirror.js';
+import Table from '../../entities/Table.js';
+import Chair from '../../entities/Chair.js';
+import Bed from '../../entities/Bed.js';
 import { INTERIORS } from '../../data/interiors.js';
 import { NPCS } from '../../data/portfolio.js';
 import { createFloor } from '../../prefab/createFloor.js';
 import { createWall } from '../../prefab/createWall.js';
-import { solidRect } from '../../prefab/solidRect.js';
 import { createPortal } from '../../prefab/portal.js';
 import { LABEL, SIGN } from '../../ui/textStyles.js';
-import { WALL, DOOR_W, PROP_FOOT, PROP_FRONT_PAD } from './constants.js';
+import { WALL, BACK_WALL, DOOR_W, tileFrame } from './constants.js';
+
+// Prop `type` → object class registry (defaults to a plain InteriorObject).
+const OBJECT_TYPES = { table: Table, mirror: Mirror, chair: Chair, bed: Bed };
 
 // One generic interior, restarted with `{ id }` to render any room from
 // interiors.js (the player's home or a shop). Walls are a solid border with a
@@ -33,9 +40,12 @@ export default class InteriorScene extends BaseWorldScene {
     const H = this.def.rows * TILE;
     this.physics.world.setBounds(0, 0, W, H);
 
-    createFloor(this, { key: `floor_${this.interiorId}`, w: W, h: H, base: this.def.floor, alt: this.def.floorAlt });
+    // Whole floor tiled with the red indoor tile (frame 24); baked once, shared
+    // across rooms.
+    createFloor(this, { key: 'floor_indoor', w: W, h: H, tile: { sheet: 'indoor', frame: 24 } });
     this.solids = this.physics.add.staticGroup();
     this.createWalls(W, H);
+    this.createSideBorders(W, H);
     this.createProps();
     this.createResident();
     this.createExit(W, H);
@@ -84,67 +94,69 @@ export default class InteriorScene extends BaseWorldScene {
       w: W,
       h: H,
       thickness: WALL,
+      topThickness: BACK_WALL,
       doorWidth: DOOR_W,
       render: (s) => g.fillRect(s.x, s.y, s.w, s.h),
     });
-    g.fillStyle(this.def.accent, 0.25); // baseboard trim along the top wall
-    g.fillRect(0, WALL, W, 2);
+    this.shadeBackWall(g, W);
+  }
+
+  // Make the top (back) wall read as a real wall: a subtle top→bottom shading
+  // gradient for depth, a darker "crown" band along the very top, and a light
+  // baseboard line at the base marking the wall→floor change.
+  shadeBackWall(g, W) {
+    const wall = Phaser.Display.Color.IntegerToColor(this.def.wall);
+    const crown = wall.clone().darken(40); // darkest, at the top edge
+
+    // Vertical gradient: dark at the top, easing to the wall colour at the base.
+    for (let y = 0; y < BACK_WALL; y++) {
+      const c = Phaser.Display.Color.Interpolate.ColorWithColor(crown, wall, BACK_WALL, y);
+      g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+      g.fillRect(0, y, W, 1);
+    }
+
+    // Crown band along the very top, and a highlight + baseboard at the base.
+    g.fillStyle(crown.color, 1);
+    g.fillRect(0, 0, W, 3);
+    g.fillStyle(0xffffff, 0.12); // faint sheen just under the crown
+    g.fillRect(0, 3, W, 1);
+    g.fillStyle(0xc8c8c8, 1); // light baseboard line at the wall→floor change
+    g.fillRect(0, BACK_WALL - 2, W, 2);
+  }
+
+  // Overlay the left and right edges with bordered indoor tiles (the wood runs
+  // along the outer edge, red floor fills the rest). One TILE-wide column down
+  // each side, sat above the flat wall fill. Colliders stay on the createWall body.
+  createSideBorders(W, H) {
+    const SIDE_LEFT = tileFrame(23, 3); // (row 3, col 23) — border on the left edge
+    const SIDE_RIGHT = tileFrame(25, 3); // (row 3, col 25) — border on the right edge
+    // Snap to the tile grid so the side columns line up with the baked floor
+    // tiles (BACK_WALL isn't necessarily a multiple of TILE).
+    const startY = Math.ceil(BACK_WALL / TILE) * TILE;
+    for (let y = startY; y < H; y += TILE) {
+      this.add.image(0, y, 'indoor', SIDE_LEFT)
+        .setOrigin(0, 0).setDisplaySize(TILE, TILE).setDepth(DEPTH.decorBelow);
+      this.add.image(W - TILE, y, 'indoor', SIDE_RIGHT)
+        .setOrigin(0, 0).setDisplaySize(TILE, TILE).setDepth(DEPTH.decorBelow);
+    }
   }
 
   createProps() {
     this.def.props.forEach((p) => {
-      const x = p.tx * TILE;
-      const y = p.ty * TILE;
-      const w = p.tw * TILE;
-      const h = p.th * TILE;
-      const bottom = y + h;
+      // Some props are their own object type (Mirror opens the About modal;
+      // Table is solid over its whole footprint).
+      const Type = OBJECT_TYPES[p.type] || (p.about ? Mirror : InteriorObject);
+      const obj = new Type(this, p);
 
-      const solid = p.solid ?? !p.decor;
-
-      // Solid props depth-sort by their base like entities, so the player passes
-      // BEHIND the upper part (and in front when standing below); flat decor
-      // (rugs, banners) stays beneath everything.
-      this.add
-        .graphics()
-        .setDepth(DEPTH.entities + bottom * 0.001 - (solid ? 0 : 0.5))
-        .fillStyle(p.color, 1)
-        .fillRoundedRect(x, y, w, h, 3);
-
-      if (solid) {
-        // Only the base is solid (its footprint): tall props can be walked behind.
-        const footTop = bottom - Math.min(h, PROP_FOOT);
-        const footBottom = bottom + PROP_FRONT_PAD;
-        solidRect(this, this.solids, x + w / 2, (footTop + footBottom) / 2, w, footBottom - footTop);
-      }
-
-      // The mirror reflects you — [E] opens the About Me modal instead of a note.
-      if (p.about) {
-        this.addInteractable({
-          x: x + w / 2,
-          y: bottom,
-          promptY: y - 6,
-          range: 34,
-          label: '[E] look',
-          action: (s) => s.openAbout(),
-        });
-        return;
-      }
-
-      let lines = p.examine;
+      // `wares` props auto-list the room resident's projects; otherwise the
+      // object's own `examine` lines (if any) drive the interaction.
+      let lines;
       if (p.wares && this.def.resident) {
         const projects = NPCS[this.def.resident].projects || [];
         lines = ['Wares on offer:', ...projects.map((pr) => `- ${pr.name}: ${pr.blurb}`)];
       }
-      if (lines) {
-        this.addInteractable({
-          x: x + w / 2,
-          y: bottom,
-          promptY: y - 6,
-          range: 34,
-          label: '[E] look',
-          action: (s) => s.openDialogue(p.name || 'Note', lines),
-        });
-      }
+      const interactable = obj.interactable(lines);
+      if (interactable) this.addInteractable(interactable);
     });
   }
 

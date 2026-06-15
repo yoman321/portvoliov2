@@ -7,9 +7,10 @@ import { solidRect } from './solidRect.js';
 //   - pass `key` + `paint(g)` to tile a generated texture (e.g. a forest border), or
 //   - pass `render({ x, y, w, h })` to draw each segment yourself (e.g. flat walls).
 // A border is just a wall with `doorWidth: 0`. Returns the segment rects.
+// Pass `topThickness` to make the top (back) wall deeper than the sides/bottom.
 export function createWall(
   scene,
-  { solids, w, h, thickness, doorWidth = 0, key, paint, depth = DEPTH.decorBelow, render }
+  { solids, w, h, thickness, topThickness = thickness, doorWidth = 0, key, paint, depth = DEPTH.decorBelow, render }
 ) {
   if (key && paint && !scene.textures.exists(key)) {
     const g = scene.make.graphics({ x: 0, y: 0 }, false);
@@ -21,13 +22,14 @@ export function createWall(
     render || ((s) => scene.add.tileSprite(s.x, s.y, s.w, s.h, key).setOrigin(0, 0).setDepth(depth));
 
   const t = thickness;
+  const tt = topThickness;
   const gapL = w / 2 - doorWidth / 2;
   const gapR = w / 2 + doorWidth / 2;
 
   const segments = [
-    { x: 0, y: 0, w, h: t }, // top
-    { x: 0, y: t, w: t, h: h - 2 * t }, // left
-    { x: w - t, y: t, w: t, h: h - 2 * t }, // right
+    { x: 0, y: 0, w, h: tt }, // top (back wall)
+    { x: 0, y: tt, w: t, h: h - tt - t }, // left
+    { x: w - t, y: tt, w: t, h: h - tt - t }, // right
   ];
   if (doorWidth > 0) {
     segments.push({ x: 0, y: h - t, w: gapL, h: t }); // bottom, left of doorway

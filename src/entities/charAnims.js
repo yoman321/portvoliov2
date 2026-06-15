@@ -1,37 +1,39 @@
-// Mana Seed "char_a_p1" frame layout (512x512 sheet, 64px frames, 8x8 grid).
-//
-// Rows 1-4 (index 0-3): stand / push / pull / jump  — col 0 is the idle pose.
-// Rows 5-8 (index 4-7): walk (cols 0-5) + run frames (cols 6-7).
-// Each block's 4 rows are the 4 facing directions, in this order:
-export const DIRECTION_ROW = { down: 0, up: 1, right: 2, left: 3 };
+// LPC ("Universal LPC Spritesheet") frame layout — 64px frames on a 13-col grid.
+// Each animation sheet (walk.png, idle.png, …) is 832x256 = 13 cols x 4 rows,
+// the 4 rows being the facing directions in this order:
+export const DIRECTION_ROW = { up: 0, left: 1, down: 2, right: 3 };
 
-const COLS = 8;
-const WALK_FRAMES = 6; // cols 0-5
-const WALK_FRAME_RATE = 8; // ~125ms/frame; guide suggests ~135ms
+const SHEET_COLS = 13; // 832 / 64
+// Walk row: col 0 is the standing pose; cols 1-8 are the 8-frame step cycle.
+const WALK_START = 1;
+const WALK_END = 8;
+const WALK_FRAME_RATE = 10;
+// Idle sheet: cols 0-1 are a 2-frame breathing loop.
+const IDLE_END = 1;
+const IDLE_FRAME_RATE = 2;
 
-// Registers `<key>-idle-<dir>` and `<key>-walk-<dir>` for all four directions
-// against a texture loaded with frameWidth/Height 64. Safe to call once per
-// texture; layered paper-doll parts (base/outfit/hair) each get their own set
-// and stay frame-synced because the indices + frame rate are identical.
-export function registerCharAnims(scene, key) {
+// Registers `<key>-idle-<dir>` and `<key>-walk-<dir>` for all four directions.
+// idle/walk frames can come from separate textures (idleKey/walkKey); a sprite
+// playing these anims auto-swaps its texture per frame, so one sprite handles
+// both sheets. Safe to call once per key.
+export function registerCharAnims(scene, key, { idleKey = key, walkKey = key } = {}) {
   for (const [dir, row] of Object.entries(DIRECTION_ROW)) {
-    const idleFrame = row * COLS; // col 0 of the stand block
-    const walkStart = (row + 4) * COLS; // walk block is rows 4-7
+    const base = row * SHEET_COLS;
 
     if (!scene.anims.exists(`${key}-idle-${dir}`)) {
       scene.anims.create({
         key: `${key}-idle-${dir}`,
-        frames: [{ key, frame: idleFrame }],
-        frameRate: 1,
+        frames: scene.anims.generateFrameNumbers(idleKey, { start: base, end: base + IDLE_END }),
+        frameRate: IDLE_FRAME_RATE,
         repeat: -1,
       });
     }
     if (!scene.anims.exists(`${key}-walk-${dir}`)) {
       scene.anims.create({
         key: `${key}-walk-${dir}`,
-        frames: scene.anims.generateFrameNumbers(key, {
-          start: walkStart,
-          end: walkStart + WALK_FRAMES - 1,
+        frames: scene.anims.generateFrameNumbers(walkKey, {
+          start: base + WALK_START,
+          end: base + WALK_END,
         }),
         frameRate: WALK_FRAME_RATE,
         repeat: -1,

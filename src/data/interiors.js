@@ -8,7 +8,8 @@
 //   prop: { tx, ty, tw, th, color, name?, examine?, wares?, solid?, decor? }
 //     - name + (examine | wares)  -> examinable via [E] look
 //     - solid (default true)      -> blocks the player; set decor:true to walk over
-import { PROFILE, DUNGEON_BOSS } from './portfolio.js';
+import { DUNGEON_BOSS } from './portfolio.js';
+import { tileFrame } from '../scenes/Interior/constants.js';
 
 export const INTERIORS = {
   home: {
@@ -17,7 +18,7 @@ export const INTERIORS = {
     rows: 10,
     floor: 0x6b4f3a,
     floorAlt: 0x5e4633,
-    wall: 0x3a2a1d,
+    wall: 0xd8c4a0,
     accent: 0x4a6fa5,
     resident: null,
     // The exit is sealed for now — interacting with the door plays this instead
@@ -25,27 +26,29 @@ export const INTERIORS = {
     lockedExit: ['The door won’t budge.', 'It’s not your time to leave yet.'],
     props: [
       {
-        tx: 1, ty: 1, tw: 2, th: 3, color: 0x6a4a7a, name: 'Bed',
-        examine: ['Your bed. Adventuring is tiring work.'],
+        tx: 11.5, ty: 2.3, tw: 2.5, th: 1.5, type: 'bed', name: 'Bed',
+        texture: 'indoor', frame: tileFrame(14, 3),
       },
       {
-        tx: 10, ty: 1, tw: 4, th: 2, color: 0x4a6fa5, name: 'Notice Board',
-        examine: [
-          `${PROFILE.name} — ${PROFILE.tagline}`,
-          `GitHub: ${PROFILE.links.github}`,
-          `Email: ${PROFILE.links.email}`,
-          'Three shops out in the clearing. Each smith of a different craft.',
-        ],
-      },
-      {
-        tx: 11, ty: 6, tw: 2, th: 2, color: 0xb08040, name: 'Chest',
-        examine: ['Old projects, half-finished ideas, the occasional gem.'],
-      },
-      {
-        tx: 5, ty: 1, tw: 1, th: 2, color: 0x9fb4c4, name: 'Mirror',
+        tx: 9, ty: 0, tw: 1, th: 2, name: 'Mirror',
+        tiles: [tileFrame(22, 14), tileFrame(22, 15)], // top→bottom
         about: true, // [E] opens the About Me modal (your reflection)
       },
-      { tx: 6, ty: 5, tw: 3, th: 2, color: 0x7a3a3a, decor: true }, // rug
+      // Wall decoration strip to the left of the mirror (row 17, cols 16→18).
+      { tx: 4, ty: 0, tw: 1, th: 1, tiles: [tileFrame(16, 17)], decor: true },
+      { tx: 5, ty: 0, tw: 1, th: 1, tiles: [tileFrame(17, 17)], decor: true },
+      { tx: 6, ty: 0, tw: 1, th: 1, tiles: [tileFrame(18, 17)], decor: true },
+      // Lower strip (row 16, cols 16→18) directly below.
+      { tx: 4, ty: 1, tw: 1, th: 1, tiles: [tileFrame(16, 16)], decor: true },
+      { tx: 5, ty: 1, tw: 1, th: 1, tiles: [tileFrame(17, 16)], decor: true },
+      { tx: 6, ty: 1, tw: 1, th: 1, tiles: [tileFrame(18, 16)], decor: true },
+      {
+        tx: 3, ty: 6, tw: 2, th: 2, type: 'table', name: 'Kitchen Table',
+        tiles: [tileFrame(6, 9), tileFrame(6, 11)], // top→bottom row
+        examine: ['A sturdy kitchen table.'],
+      },
+      { tx: 1.5, ty: 6, tw: 1.5, th: 1.5, type: 'chair', texture: 'indoor', frame: tileFrame(2, 7) }, // left chair
+      { tx: 5, ty: 6, tw: 1.5, th: 1.5, type: 'chair', texture: 'indoor', frame: tileFrame(3, 7) }, // right chair
     ],
   },
 
